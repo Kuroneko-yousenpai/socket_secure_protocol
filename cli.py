@@ -47,19 +47,34 @@ class AdvancedSecureCommandHeader:
         return kdf.derive(pwd_key)
 
     def read(self, stream, pwd_key):
-        self.fillRawsFromStream(stream, pwd_key)
-        if self.validate():
-            self.parse()
-            return self
-        raise ValueError(self.ILLEGAL_COMMAND_HEADER)
+        try:
+            self.fillRawsFromStream(stream, pwd_key)
+            if self.validate():
+                self.parse()
+                return self
+            raise ValueError(self.ILLEGAL_COMMAND_HEADER)
+        except Exception as e:
+            print(f"Read error: {str(e)}")
+            raise
 
     def fillRawsFromStream(self, stream, pwd_key):
+        header_length = 9
+        timestamp_length = 8
+        hmac_length = 32
+        timestamp_end = header_length + timestamp_length
+        hmac_end = timestamp_end + hmac_length
         salt = stream.read(16)
         nonce = stream.read(12)
         tag = stream.read(16)
         encrypted_header = stream.read()
 
-        if len(salt) != 16 or len(nonce) != 12 or len(tag) != 16 or not encrypted_header:
+        if len(salt) != 16:
+            raise ValueError("Invalid salt length")
+        elif len(nonce) != 12:
+            raise ValueError("Invalid nonce length")
+        elif len(tag) != 16:
+            raise ValueError("Invalid tag length")
+        if not encrypted_header:
             raise ValueError("Invalid encrypted header length")
 
         print(f"Server - Salt: {salt.hex()}")
@@ -69,28 +84,27 @@ class AdvancedSecureCommandHeader:
 
         key = self.derive_key(pwd_key, salt)
 
-        backend = default_backend()
-        cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), backend=backend)
+        cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend())
         decryptor = cipher.decryptor()
         decrypted_header = decryptor.update(encrypted_header) + decryptor.finalize()
 
         print(f"Server - Decrypted Header: {decrypted_header.hex()}")
-        print(f"Server - Header data: {decrypted_header[:9].hex()}")
+        print(f"Server - Header data: {decrypted_header[:header_length].hex()}")
 
-        self.flags, self.raw_command_id, self.raw_length = struct.unpack(">BII", decrypted_header[:9])
+        self.flags, self.raw_command_id, self.raw_length = struct.unpack(">BII", decrypted_header[:header_length])
 
         data_length = self.raw_length & self.CLEAN_LENGTH
-        self.data = decrypted_header[9:9+data_length]
+        self.data = decrypted_header[header_length:header_length+data_length]
         print(f"Server - Data: {self.data.hex()}")
-        timestamp = decrypted_header[9+data_length:data_length+17]
+        timestamp = decrypted_header[header_length+data_length:data_length+timestamp_end]
         print(f"Server - Timestamp: {timestamp.hex()}")
-        hmac_value = decrypted_header[data_length+17:data_length+49]
+        hmac_value = decrypted_header[data_length+timestamp_end:data_length+hmac_end]
         print(f"Server - HMAC: {hmac_value.hex()}")
 
         # Integrity check using HMAC
-        h = hmac.HMAC(key, hashes.SHA256(), backend=backend)
-        print(f"Before verify 0: {decrypted_header[:9].hex()}")
-        h.update(decrypted_header[:9] + timestamp)
+        h = hmac.HMAC(key, hashes.SHA256(), backend=default_backend())
+        print(f"Before verify 0: {decrypted_header[:header_length].hex()}")
+        h.update(decrypted_header[:header_length] + timestamp)
         print(f"Before verify 1: {hmac_value.hex()}")
         h.verify(hmac_value)
 

@@ -62,7 +62,7 @@ class AdvancedSecureCommandHeader:
         header_length = 9
         timestamp_length = 8
         hmac_length = 32
-        timestamp_end = header_length+timestamp_length
+        timestamp_end = header_length + timestamp_length
         hmac_end = timestamp_end + hmac_length
         salt = stream.read(16)
         nonce = stream.read(12)
