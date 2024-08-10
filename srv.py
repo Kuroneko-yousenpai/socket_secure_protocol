@@ -27,6 +27,7 @@ class AdvancedSecureCommandHeader:
     ILLEGAL_COMMAND_HEADER = "Invalid command header"
     ILLEGAL_VAR_VALUES = "Invalid variable values"
     NONCE_SIZE = 12
+    SIGNATURE = b'\xDE\xAD\xC0\xDE'
 
     def __init__(self):
         self.is_valid = False
@@ -179,9 +180,12 @@ class AdvancedSecureCommandHeader:
         print(f"Client - HMAC: {hmac_value.hex()}")
         print(f"Client - Timestamp: {timestamp.hex()}")
 
+        int_size = struct.calcsize(">I")
+        packet_length = len(self.SIGNATURE) + int_size + len(salt) + len(iv) + len(encryptor.tag) + len(encrypted_header)
+
         # Write salt, iv, tag, and encrypted header
         stream.seek(0)
-        stream.write(salt + iv + encryptor.tag + encrypted_header)
+        stream.write(self.SIGNATURE + struct.pack(">I", packet_length) + salt + iv + encryptor.tag + encrypted_header)
 
 @dataclass
 class TestStructure:
@@ -210,9 +214,33 @@ def deserializeCommand(command_data, header):
     return None
 
 def handle_client(client_socket, password):
+    BUFFER_SIZE: int = 1024
+
     try:
-        req_data = client_socket.recv(1024)
+        req_data = client_socket.recv(BUFFER_SIZE)
         stream = io.BytesIO(req_data)
+        sec_sign = stream.read(len(AdvancedSecureCommandHeader.SIGNATURE))
+        if sec_sign != AdvancedSecureCommandHeader.SIGNATURE:
+            print(f"Invalid protocol signature")
+            return
+        packet_size = struct.unpack(">I", stream.read(4))[0]
+        req_length = stream.getbuffer().nbytes
+        body_start_pos = stream.tell()
+        if packet_size > req_length:
+            print(f"Wait other parts of secure request...")
+            while True:
+                req_data_part = client_socket.recv(BUFFER_SIZE)
+                if not req_data_part:
+                    print(f"Connection closed by client")
+                    return
+                print(f"Received secure data part from client: {req_data}")
+                stream.seek(0, io.SEEK_END)
+                stream.write(req_data_part)
+                req_length = stream.getbuffer().nbytes
+                if req_length >= packet_size:
+                    print(f"All packet parts of the secure request received. Total length: {req_length} bytes (expected: {packet_size} bytes)")
+                    stream.seek(body_start_pos)
+                    break
         header = AdvancedSecureCommandHeader()
         header.read(stream, password)
         print(f"Received command ID: {header.command_id}, Length: {header.length}")

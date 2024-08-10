@@ -26,6 +26,7 @@ class AdvancedSecureCommandHeader:
     ILLEGAL_COMMAND_HEADER = "Invalid command header"
     ILLEGAL_VAR_VALUES = "Invalid variable values"
     NONCE_SIZE = 12
+    SIGNATURE = b'\xDE\xAD\xC0\xDE'
 
     def __init__(self):
         self.is_valid = False
@@ -178,9 +179,12 @@ class AdvancedSecureCommandHeader:
         print(f"Client - HMAC: {hmac_value.hex()}")
         print(f"Client - Timestamp: {timestamp.hex()}")
 
+        int_size = struct.calcsize(">I")
+        packet_length = len(self.SIGNATURE) + int_size + len(salt) + len(iv) + len(encryptor.tag) + len(encrypted_header)
+
         # Write salt, iv, tag, and encrypted header
         stream.seek(0)
-        stream.write(salt + iv + encryptor.tag + encrypted_header)
+        stream.write(self.SIGNATURE + struct.pack(">I", packet_length) + salt + iv + encryptor.tag + encrypted_header)
 
 @dataclass
 class TestStructure:
