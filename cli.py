@@ -14,7 +14,7 @@ class AdvancedSecureCommandHeader:
     MAX_UINT32 = 4294967295
     CONST_FLAGS = 87
     B_FLAG = 128
-    B_SYNC = 32768
+    B_SYNC = 4294967296
     D_FLAG = 32
     D_SYNC = 1073741824
     E_FLAG = 8
