@@ -59,7 +59,7 @@ class AdvancedSecureCommandHeader:
             raise
 
     def fillRawsFromStream(self, stream, pwd_key):
-        header_length = 9
+        header_length = 17
         timestamp_length = 8
         hmac_length = 32
         timestamp_end = header_length + timestamp_length
@@ -92,7 +92,7 @@ class AdvancedSecureCommandHeader:
         print(f"Server - Decrypted Header: {decrypted_header.hex()}")
         print(f"Server - Header data: {decrypted_header[:header_length].hex()}")
 
-        self.flags, self.raw_command_id, self.raw_length = struct.unpack(">BII", decrypted_header[:header_length])
+        self.flags, self.raw_command_id, self.raw_length = struct.unpack(">BQQ", decrypted_header[:header_length])
 
         data_length = self.raw_length & self.CLEAN_LENGTH
         self.data = decrypted_header[header_length:header_length+data_length]
@@ -152,7 +152,7 @@ class AdvancedSecureCommandHeader:
             self.raw_length |= self.E_SYNC
 
         s_data = stream.getvalue()
-        header_data = struct.pack(">BII", self.flags, self.raw_command_id, self.raw_length)
+        header_data = struct.pack(">BQQ", self.flags, self.raw_command_id, self.raw_length)
         timestamp = struct.pack(">Q", int(time.time()))
 
         # Generate salt
